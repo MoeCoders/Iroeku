@@ -1,0 +1,14 @@
+function love.conf(t)
+    t.window.title = "My Game"
+    t.window.width = 1280
+    t.window.height = 720
+    t.window.resizable = true
+end
+
+local gameConfig = {
+    title = "My Game",
+    subtitle = "A fun game",
+    aspectRatio = 16 / 9
+}
+
+return gameConfig
