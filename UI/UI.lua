@@ -51,7 +51,7 @@ local UI = {
         anchors = true,                -- 是否显示锚点
     },
 
-    -- 支持的新显示模式
+    -- 支持的显示模式
     DISPLAY_MODES = {
         RELATIVE = "relative",           -- 相对位置 (默认)
         CENTER = "center",               -- 居中
@@ -72,8 +72,198 @@ local UI = {
         PIXELS = "pixels",   -- 像素值
         PERCENT = "percent", -- 百分比
         ASPECT = "aspect"    -- 保持宽高比
+    },
+    ANCHOR_POINTS = {
+        top_left = { x = 0, y = 0 },
+        top_center = { x = 0.5, y = 0 },
+        top_right = { x = 1, y = 0 },
+        center_left = { x = 0, y = 0.5 },
+        center = { x = 0.5, y = 0.5 },
+        center_right = { x = 1, y = 0.5 },
+        bottom_left = { x = 0, y = 1 },
+        bottom_center = { x = 0.5, y = 1 },
+        bottom_right = { x = 1, y = 1 }
     }
 }
+-- 在UI结构定义后添加布局默认偏移配置
+UI.DEFAULT_OFFSETS = {
+    [UI.DISPLAY_MODES.RELATIVE] = { x = 0, y = 0 },
+    [UI.DISPLAY_MODES.CENTER] = { x = 0.5, y = 0.5 },
+    [UI.DISPLAY_MODES.TOP_LEFT] = { x = 0, y = 0 },
+    [UI.DISPLAY_MODES.TOP_RIGHT] = { x = 1, y = 0 },
+    [UI.DISPLAY_MODES.TOP_CENTER] = { x = 0.5, y = 0 },
+    [UI.DISPLAY_MODES.BOTTOM_LEFT] = { x = 0, y = 1 },
+    [UI.DISPLAY_MODES.BOTTOM_RIGHT] = { x = 1, y = 1 },
+    [UI.DISPLAY_MODES.BOTTOM_CENTER] = { x = 0.5, y = 1 },
+    [UI.DISPLAY_MODES.LEFT_CENTER] = { x = 0, y = 0.5 },
+    [UI.DISPLAY_MODES.RIGHT_CENTER] = { x = 1, y = 0.5 },
+    [UI.DISPLAY_MODES.FILL] = { x = 0, y = 0 },
+    [UI.DISPLAY_MODES.ABSOLUTE] = { x = 0, y = 0 }
+}
+
+-- 修改尺寸计算函数以处理内边距
+local function calculateDimension(def, parentDim, parentPadding)
+    parentPadding = parentPadding or 0
+    if type(def) == "number" then
+        return math.max(0, def - parentPadding * 2)
+    end
+
+    if type(def) == "table" then
+        local value = def.value or 1
+        local unit = def.unit or UI.SIZE_UNITS.PIXELS
+
+        if unit == UI.SIZE_UNITS.PERCENT then
+            return math.max(0, parentDim * value - parentPadding * 2)
+        else
+            return math.max(0, value - parentPadding * 2)
+        end
+    end
+
+    return math.max(0, parentDim - parentPadding * 2)
+end
+
+-- 完全重写子节点位置计算逻辑
+local function calculatePosition(child, parent)
+    local padding = child.padding or 0
+    local anchor = UI.ANCHOR_POINTS[child.anchor] or UI.ANCHOR_POINTS.top_left
+    local defaultOffset = UI.DEFAULT_OFFSETS[child.anchor] or { x = 0, y = 0 }
+
+    -- 处理偏移量
+    -- 预先获取父容器尺寸（避免多次访问）
+    local pw, ph = parent._width, parent._height
+
+    -- 内联转换逻辑：消除函数调用开销
+    local function toAbsolute(val, size)
+        return type(val) == "number" and val >= 0 and val <= 1 and val * size or (val or 0)
+    end
+
+    -- 处理默认偏移（单次属性访问）
+    local dx, dy = defaultOffset.x, defaultOffset.y
+    local defaultX = toAbsolute(dx, pw)
+    local defaultY = toAbsolute(dy, ph)
+
+    -- 处理子偏移（安全访问优化）
+    local childOffset = child.offset
+    local cx = childOffset and childOffset.x
+    local cy = childOffset and childOffset.y
+
+    -- 最终偏移计算（无分支计算）
+    local offsetX = defaultX + toAbsolute(cx, pw)
+    local offsetY = defaultY + toAbsolute(cy, ph)
+    -- 计算基本位置（基于显示模式）
+    local baseX, baseY = 0, 0
+
+    if child.display_mode == UI.DISPLAY_MODES.RELATIVE then
+        baseX = padding
+        baseY = padding
+    elseif child.display_mode == UI.DISPLAY_MODES.CENTER then
+        baseX = (parent._width - child._width) / 2
+        baseY = (parent._height - child._height) / 2
+    elseif child.display_mode == UI.DISPLAY_MODES.TOP_LEFT then
+        baseX = padding
+        baseY = padding
+    elseif child.display_mode == UI.DISPLAY_MODES.TOP_RIGHT then
+        baseX = parent._width - child._width - padding
+        baseY = padding
+    elseif child.display_mode == UI.DISPLAY_MODES.TOP_CENTER then
+        baseX = (parent._width - child._width) / 2
+        baseY = padding
+    elseif child.display_mode == UI.DISPLAY_MODES.BOTTOM_LEFT then
+        baseX = padding
+        baseY = parent._height - child._height - padding
+    elseif child.display_mode == UI.DISPLAY_MODES.BOTTOM_RIGHT then
+        baseX = parent._width - child._width - padding
+        baseY = parent._height - child._height - padding
+    elseif child.display_mode == UI.DISPLAY_MODES.BOTTOM_CENTER then
+        baseX = (parent._width - child._width) / 2
+        baseY = parent._height - child._height - padding
+    elseif child.display_mode == UI.DISPLAY_MODES.LEFT_CENTER then
+        baseX = padding
+        baseY = (parent._height - child._height) / 2
+    elseif child.display_mode == UI.DISPLAY_MODES.RIGHT_CENTER then
+        baseX = parent._width - child._width - padding
+        baseY = (parent._height - child._height) / 2
+    elseif child.display_mode == UI.DISPLAY_MODES.FILL then
+        baseX = padding
+        baseY = padding
+        -- 填充模式需要特殊处理尺寸
+        child._width = math.max(0, parent._width - padding * 2)
+        child._height = math.max(0, parent._height - padding * 2)
+    elseif child.display_mode == UI.DISPLAY_MODES.ABSOLUTE then
+        baseX = offsetX
+        baseY = offsetY
+        offsetX, offsetY = 0, 0 -- 绝对定位不使用额外偏移
+    end
+
+    -- 应用锚点偏移（基于元素自身尺寸）
+    local anchorOffsetX = anchor.x * child._width
+    local anchorOffsetY = anchor.y * child._height
+
+    -- 最终位置计算
+    return {
+        x = baseX + offsetX - anchorOffsetX,
+        y = baseY + offsetY - anchorOffsetY,
+    }
+end
+
+-- 更新updateChildren函数
+local function updateChildren(parent)
+    if not parent or not parent.children then return end
+
+    -- 先更新所有子节点的尺寸
+    for _, child in pairs(parent.children) do
+        if not child.is_display then goto continue end
+
+        -- 设置/更新父代理
+        if not child.parent then
+            child.parent = createParentProxy(parent)
+        else
+            child.parent._parent = parent
+        end
+
+        -- 获取内边距
+        local padding = child.padding or 0
+
+        -- 处理尺寸定义
+        local widthDef = child.width or { value = 1, unit = UI.SIZE_UNITS.PERCENT }
+        local heightDef = child.height or { value = 1, unit = UI.SIZE_UNITS.PERCENT }
+
+        -- 计算尺寸
+        child._width = calculateDimension(widthDef, parent._width, padding)
+        child._height = calculateDimension(heightDef, parent._height, padding)
+
+        -- 尺寸限制
+        if child.min_width then
+            child._width = math_max(child._width, calculateDimension(child.min_width, parent._width))
+        end
+        if child.max_width then
+            child._width = math_min(child._width, calculateDimension(child.max_width, parent._width))
+        end
+        if child.min_height then
+            child._height = math_max(child._height, calculateDimension(child.min_height, parent._height))
+        end
+        if child.max_height then
+            child._height = math_min(child._height, calculateDimension(child.max_height, parent._height))
+        end
+
+        ::continue::
+    end
+
+    -- 然后更新位置
+    for _, child in pairs(parent.children) do
+        if not child.is_display then goto continue end
+
+        -- 计算位置
+        local pos = calculatePosition(child, parent)
+        child._x = pos.x
+        child._y = pos.y
+
+        -- 递归处理子节点
+        updateChildren(child)
+
+        ::continue::
+    end
+end
 
 -- 资源预加载
 display.logoImage = display.logoImage or love.graphics.newImage("resources/logo.jpg")
@@ -99,37 +289,6 @@ local function drawBackground(self)
     end
 end
 
--- 主菜单绘制函数
-local function drawMainMenu(self)
-    set_color(1, 1, 1, 0.7)
-    rectangle("fill", 0, 0, self._width, self._height)
-
-    -- 调试: 显示位置和尺寸信息
-    if UI.debug.enabled then
-        if UI.debug.positions or UI.debug.sizes then
-            set_color(0, 0, 0, 1)
-            local text = "Left Panel"
-            if UI.debug.sizes then
-                text = text .. string.format("\nSize: %d x %d", math_floor(self._width), math_floor(self._height))
-            end
-            if UI.debug.positions then
-                text = text .. string.format("\nPos: (%d, %d)", math_floor(self._x), math_floor(self._y))
-            end
-            if UI.debug.anchors then
-                text = text .. string.format("\nAnchor: %s", self.anchor or "none")
-            end
-            love.graphics.print(text, 10, 10)
-            set_color(1, 1, 1, 1)
-        end
-
-        if UI.debug.outlines then
-            set_color(0, 1, 0, 1)
-            rectangle("line", 0, 0, self._width, self._height)
-            set_color(1, 1, 1, 1)
-        end
-    end
-end
-
 -- 初始化UI结构
 UI.body.children.background = {
     id = "background",
@@ -139,7 +298,20 @@ UI.body.children.background = {
     height = { value = 1, unit = UI.SIZE_UNITS.PERCENT },
     display_mode = UI.DISPLAY_MODES.FILL,
     anchor = "top_left",
-    children = nil,
+    children = {
+        sd = {
+            id = "sd",
+            z_index = 1,
+            is_display = true,
+            width = { value = 0.3, unit = UI.SIZE_UNITS.PERCENT },
+            height = { value = 0.3, unit = UI.SIZE_UNITS.PERCENT },
+            anchor = "center",
+            draw = function(self)
+                set_color(0, 1, 0, 1)
+                rectangle("fill", 0, 0, self._width, self._height)
+            end
+        }
+    },
     draw = drawBackground
 }
 
@@ -160,9 +332,50 @@ UI.body.children.main_menu = {
             height = { value = 1, unit = UI.SIZE_UNITS.PERCENT },
             display_mode = UI.DISPLAY_MODES.RELATIVE,
             anchor = "top_left",
-            offset = { x = 0, y = 0 },
-            children = nil,
-            draw = drawMainMenu
+            children = {
+                buttonlist = {
+                    id = "button_list",
+                    z_index = 1,
+                    is_display = true,
+                    width = { value = 0.7, unit = UI.SIZE_UNITS.PERCENT },
+                    height = { value = 0.7, unit = UI.SIZE_UNITS.PERCENT },
+                    anchor = "center",
+                    draw = function(self)
+                        set_color(1, 0, 0, 0.5)
+                        rectangle("fill", 0, 0, self._width, self._height)
+                    end
+                }
+            },
+            draw = function(self)
+                set_color(1, 1, 1, 0.7)
+                rectangle("fill", 0, 0, self._width, self._height)
+
+                -- 调试: 显示位置和尺寸信息
+                if UI.debug.enabled then
+                    if UI.debug.positions or UI.debug.sizes then
+                        set_color(0, 0, 0, 1)
+                        local text = "Left Panel"
+                        if UI.debug.sizes then
+                            text = text ..
+                                string.format("\nSize: %d x %d", math_floor(self._width), math_floor(self._height))
+                        end
+                        if UI.debug.positions then
+                            text = text .. string.format("\nPos: (%d, %d)", math_floor(self._x), math_floor(self._y))
+                        end
+                        if UI.debug.anchors then
+                            text = text .. string.format("\nAnchor: %s", self.anchor or "none")
+                        end
+                        love.graphics.print(text, 10, 10)
+                        set_color(1, 1, 1, 1)
+                    end
+
+                    if UI.debug.outlines then
+                        set_color(0, 1, 0, 1)
+                        rectangle("line", 0, 0, self._width, self._height)
+                        set_color(1, 1, 1, 1)
+                    end
+                end
+            end
         },
         right = {
             id = "right",
@@ -172,7 +385,6 @@ UI.body.children.main_menu = {
             height = { value = 1, unit = UI.SIZE_UNITS.PERCENT },
             display_mode = UI.DISPLAY_MODES.RELATIVE,
             anchor = "top_right",
-            offset = { x = 1, y = 0 }, -- 从父节点宽度的30%处开始
             children = nil,
             draw = function(self)
                 set_color(0.9, 0.9, 1, 0.5)
@@ -230,167 +442,6 @@ local function calculateDimension(def, parentDim)
 
     -- 默认情况
     return parentDim
-end
-
--- 递归更新子节点尺寸信息 - 修复尺寸更新问题
-local function updateChildren(parent)
-    if not parent or not parent.children then return end
-
-    -- 先更新所有子节点的尺寸
-    for _, child in pairs(parent.children) do
-        if not child.is_display then goto continue end
-
-        -- 设置/更新父代理
-        if not child.parent then
-            child.parent = createParentProxy(parent)
-        else
-            child.parent._parent = parent
-        end
-
-        -- 处理尺寸定义 - 保留原始定义
-        local widthDef = child.width or { value = 1, unit = UI.SIZE_UNITS.PERCENT }
-        local heightDef = child.height or { value = 1, unit = UI.SIZE_UNITS.PERCENT }
-
-        -- 计算尺寸 - 使用统一的尺寸计算函数
-        -- 使用 _width 和 _height 存储计算后的尺寸
-        child._width = calculateDimension(widthDef, parent._width)
-        child._height = calculateDimension(heightDef, parent._height)
-
-        -- 限制最小/最大尺寸
-        if child.min_width then
-            child._width = math_max(child._width, calculateDimension(child.min_width, parent._width))
-        end
-        if child.max_width then
-            child._width = math_min(child._width, calculateDimension(child.max_width, parent._width))
-        end
-        if child.min_height then
-            child._height = math_max(child._height, calculateDimension(child.min_height, parent._height))
-        end
-        if child.max_height then
-            child._height = math_min(child._height, calculateDimension(child.max_height, parent._height))
-        end
-
-        ::continue::
-    end
-
-    -- 然后更新位置（确保所有尺寸已计算）
-    for _, child in pairs(parent.children) do
-        if not child.is_display then goto continue end
-
-        -- 获取偏移量（支持百分比和像素值）
-        local offsetX = child.offset and child.offset.x or 0
-        local offsetY = child.offset and child.offset.y or 0
-
-        -- 转换百分比偏移
-        if type(offsetX) == "number" and offsetX >= 0 and offsetX <= 1 then
-            offsetX = parent._width * offsetX
-        else
-            offsetX = offsetX or 0
-        end
-        if type(offsetY) == "number" and offsetY >= 0 and offsetY <= 1 then
-            offsetY = parent._height * offsetY
-        else
-            offsetY = offsetY or 0
-        end
-
-        -- 锚点位置计算
-        local anchor = child.anchor or "top_left"
-
-        -- 根据显示模式和锚点计算位置
-        if child.display_mode == UI.DISPLAY_MODES.RELATIVE then
-            -- 相对位置
-            child._x = offsetX
-            child._y = offsetY
-        elseif child.display_mode == UI.DISPLAY_MODES.CENTER then
-            -- 居中
-            child._x = (parent._width - child._width) / 2 + offsetX
-            child._y = (parent._height - child._height) / 2 + offsetY
-        elseif child.display_mode == UI.DISPLAY_MODES.TOP_LEFT then
-            -- 左上角
-            child._x = offsetX
-            child._y = offsetY
-        elseif child.display_mode == UI.DISPLAY_MODES.TOP_RIGHT then
-            -- 右上角
-            child._x = parent._width - child._width - offsetX
-            child._y = offsetY
-        elseif child.display_mode == UI.DISPLAY_MODES.TOP_CENTER then
-            -- 顶部居中
-            child._x = (parent._width - child._width) / 2 + offsetX
-            child._y = offsetY
-        elseif child.display_mode == UI.DISPLAY_MODES.BOTTOM_LEFT then
-            -- 左下角
-            child._x = offsetX
-            child._y = parent._height - child._height - offsetY
-        elseif child.display_mode == UI.DISPLAY_MODES.BOTTOM_RIGHT then
-            -- 右下角
-            child._x = parent._width - child._width - offsetX
-            child._y = parent._height - child._height - offsetY
-        elseif child.display_mode == UI.DISPLAY_MODES.BOTTOM_CENTER then
-            -- 底部居中
-            child._x = (parent._width - child._width) / 2 + offsetX
-            child._y = parent._height - child._height - offsetY
-        elseif child.display_mode == UI.DISPLAY_MODES.LEFT_CENTER then
-            -- 左侧居中
-            child._x = offsetX
-            child._y = (parent._height - child._height) / 2 + offsetY
-        elseif child.display_mode == UI.DISPLAY_MODES.RIGHT_CENTER then
-            -- 右侧居中
-            child._x = parent._width - child._width - offsetX
-            child._y = (parent._height - child._height) / 2 + offsetY
-        elseif child.display_mode == UI.DISPLAY_MODES.FILL then
-            -- 填充父容器 - 仅设置位置，不重置尺寸
-            child._x = offsetX
-            child._y = offsetY
-        elseif child.display_mode == UI.DISPLAY_MODES.ABSOLUTE then
-            -- 绝对定位（相对于屏幕）
-            child._x = offsetX
-            child._y = offsetY
-        else
-            -- 默认相对定位
-            child._x = offsetX
-            child._y = offsetY
-        end
-
-        -- 根据锚点微调位置
-        if anchor == "top_left" then
-            -- 默认，无需调整
-        elseif anchor == "top_center" then
-            child._x = child._x - child._width / 2
-        elseif anchor == "top_right" then
-            child._x = child._x - child._width
-        elseif anchor == "center_left" then
-            child._y = child._y - child._height / 2
-        elseif anchor == "center" then
-            child._x = child._x - child._width / 2
-            child._y = child._y - child._height / 2
-        elseif anchor == "center_right" then
-            child._x = child._x - child._width
-            child._y = child._y - child._height / 2
-        elseif anchor == "bottom_left" then
-            child._y = child._y - child._height
-        elseif anchor == "bottom_center" then
-            child._x = child._x - child._width / 2
-            child._y = child._y - child._height
-        elseif anchor == "bottom_right" then
-            child._x = child._x - child._width
-            child._y = child._y - child._height
-        end
-
-        -- 调试: 打印位置和尺寸信息
-        if UI.debug.enabled then
-            print(string.format(
-                "[UI DEBUG] child %s: mode=%s, anchor=%s, x=%d, y=%d, width=%d, height=%d",
-                child.id, child.display_mode, child.anchor or "none",
-                math_floor(child._x), math_floor(child._y),
-                math_floor(child._width), math_floor(child._height)
-            ))
-        end
-
-        -- 递归处理子节点
-        updateChildren(child)
-
-        ::continue::
-    end
 end
 
 -- 修复: 确保body尺寸正确更新
@@ -559,7 +610,6 @@ function UI:addElement(parentId, element)
         element.is_display = element.is_display ~= false
         element.display_mode = element.display_mode or UI.DISPLAY_MODES.RELATIVE
         element.anchor = element.anchor or "top_left"
-        element.offset = element.offset or { x = 0, y = 0 }
 
         -- 设置尺寸默认值
         if not element.width then
