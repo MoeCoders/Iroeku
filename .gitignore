@@ -1,3 +1,5 @@
 .luarc.json
 release/
 resources/*
+**/*.zip
+**/*.love
