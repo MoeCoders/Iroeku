@@ -1,4 +1,4 @@
-local UI = require("UI")
+local UI = require("UI.UI")
 
 local gameDisplay = require("display")
 
@@ -10,10 +10,14 @@ function love.load()
 end
 
 function love.update(dt)
-    UI:update()
+    UI:checkForUpdates()
 end
 
--- 绘制背景
+function love.resize(w, h)
+    -- 标记UI需要更新
+    UI.needsUpdate = true
+end
+
 function love.draw()
     -- 图片大小自适应，根据Body尺寸显示，保持纵横比, 并居中显示
     UI:draw()
@@ -27,6 +31,6 @@ end
 
 function love.keyreleased(key)
     if key == "a" then
-        UI.body.children.main_menu.is_display = not UI.body.children.main_menu.is_display
+        UI:setElementVisibility("right", false)
     end
 end

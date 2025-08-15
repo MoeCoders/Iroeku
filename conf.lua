@@ -9,7 +9,8 @@ end
 local gameConfig = {
     title = "My Game",
     subtitle = "A fun game",
-    aspectRatio = 16 / 9
+    aspectRatio = 16 / 9,
+    debug = true
 }
 
 return gameConfig
