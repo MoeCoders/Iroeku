@@ -50,12 +50,14 @@ function GalEngine.Character(def)
         other = def.other or {}
     }
 
+    --- 显示角色
     function char:show()
         self.visible = true
         print(string.format("[显示角色] %s (%s) at (%d,%d)",
             self.name, self.image, self.x, self.y))
     end
 
+    --- 隐藏角色
     function char:hide()
         self.visible = false
         print("[隐藏角色] " .. self.name)

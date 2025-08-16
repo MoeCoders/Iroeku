@@ -2,6 +2,9 @@
 local conf = require("conf")
 local display = require("display")
 local RectLayout = require("UI.RectLayout")
+local utils = require("UI.utils")
+local bodyElement = require("UI.Layout.body")
+
 -- 局部化常用函数和模块
 local math_min = math.min
 local math_floor = math.floor
@@ -35,73 +38,7 @@ end
 
 -- UI 结构定义
 local UI = {
-    body = {
-        id = "body",
-        _x = 0,
-        _y = 0,
-        _abs_x = 0,
-        _abs_y = 0,
-        children = {},
-        is_display = true
-    },
-    -- 调试配置
-    debug = {
-        enabled = conf.debug or false, -- 是否启用调试
-        grid = true,                   -- 是否显示网格
-        outlines = true,               -- 是否显示轮廓
-        positions = true,              -- 是否显示位置信息
-        sizes = true,                  -- 是否显示尺寸信息
-        anchors = true,                -- 是否显示锚点
-    },
-
-    -- 支持的显示模式
-    DISPLAY_MODES = {
-        RELATIVE = "relative",           -- 相对位置 (默认)
-        CENTER = "center",               -- 居中
-        TOP_LEFT = "top_left",           -- 左上角
-        TOP_RIGHT = "top_right",         -- 右上角
-        TOP_CENTER = "top_center",       -- 顶部居中
-        BOTTOM_LEFT = "bottom_left",     -- 左下角
-        BOTTOM_RIGHT = "bottom_right",   -- 右下角
-        BOTTOM_CENTER = "bottom_center", -- 底部居中
-        LEFT_CENTER = "left_center",     -- 左侧居中
-        RIGHT_CENTER = "right_center",   -- 右侧居中
-        FILL = "fill",                   -- 填充父容器
-        ABSOLUTE = "absolute"            -- 绝对定位 (相对于屏幕)
-    },
-
-    -- 支持的尺寸单位
-    SIZE_UNITS = {
-        PIXELS = "pixels",   -- 像素值
-        PERCENT = "percent", -- 百分比
-        ASPECT = "aspect"    -- 保持宽高比
-    },
-    ANCHOR_POINTS = {
-        top_left = { x = 0, y = 0 },
-        top_center = { x = 0.5, y = 0 },
-        top_right = { x = 1, y = 0 },
-        center_left = { x = 0, y = 0.5 },
-        center = { x = 0.5, y = 0.5 },
-        center_right = { x = 1, y = 0.5 },
-        bottom_left = { x = 0, y = 1 },
-        bottom_center = { x = 0.5, y = 1 },
-        bottom_right = { x = 1, y = 1 }
-    }
-}
--- 在UI结构定义后添加布局默认偏移配置
-UI.DEFAULT_OFFSETS = {
-    [UI.DISPLAY_MODES.RELATIVE] = { x = 0, y = 0 },
-    [UI.DISPLAY_MODES.CENTER] = { x = 0.5, y = 0.5 },
-    [UI.DISPLAY_MODES.TOP_LEFT] = { x = 0, y = 0 },
-    [UI.DISPLAY_MODES.TOP_RIGHT] = { x = 1, y = 0 },
-    [UI.DISPLAY_MODES.TOP_CENTER] = { x = 0.5, y = 0 },
-    [UI.DISPLAY_MODES.BOTTOM_LEFT] = { x = 0, y = 1 },
-    [UI.DISPLAY_MODES.BOTTOM_RIGHT] = { x = 1, y = 1 },
-    [UI.DISPLAY_MODES.BOTTOM_CENTER] = { x = 0.5, y = 1 },
-    [UI.DISPLAY_MODES.LEFT_CENTER] = { x = 0, y = 0.5 },
-    [UI.DISPLAY_MODES.RIGHT_CENTER] = { x = 1, y = 0.5 },
-    [UI.DISPLAY_MODES.FILL] = { x = 0, y = 0 },
-    [UI.DISPLAY_MODES.ABSOLUTE] = { x = 0, y = 0 }
+    body = bodyElement,
 }
 
 
@@ -114,9 +51,9 @@ local function calculateDimension(def, parentDim, parentPadding)
 
     if type(def) == "table" then
         local value = def.value or 1
-        local unit = def.unit or UI.SIZE_UNITS.PIXELS
+        local unit = def.unit or utils.SIZE_UNITS.PIXELS
 
-        if unit == UI.SIZE_UNITS.PERCENT then
+        if unit == utils.SIZE_UNITS.PERCENT then
             return math.max(0, parentDim * value - parentPadding * 2)
         else
             return math.max(0, value - parentPadding * 2)
@@ -126,11 +63,11 @@ local function calculateDimension(def, parentDim, parentPadding)
     return math.max(0, parentDim - parentPadding * 2)
 end
 
--- 完全重写子节点位置计算逻辑
+-- 子节点位置计算逻辑
 local function calculatePosition(child, parent)
     local padding = child.padding or 0
-    local anchor = UI.ANCHOR_POINTS[child.anchor] or UI.ANCHOR_POINTS.top_left
-    local defaultOffset = UI.DEFAULT_OFFSETS[child.anchor] or { x = 0, y = 0 }
+    local anchor = utils.ANCHOR_POINTS[child.anchor] or utils.ANCHOR_POINTS.top_left
+    local defaultOffset = anchor
 
     -- 处理偏移量
     -- 预先获取父容器尺寸（避免多次访问）
@@ -157,43 +94,43 @@ local function calculatePosition(child, parent)
     -- 计算基本位置（基于显示模式）
     local baseX, baseY = 0, 0
 
-    if child.display_mode == UI.DISPLAY_MODES.RELATIVE then
+    if child.display_mode == utils.DISPLAY_MODES.RELATIVE then
         baseX = padding
         baseY = padding
-    elseif child.display_mode == UI.DISPLAY_MODES.CENTER then
+    elseif child.display_mode == utils.DISPLAY_MODES.CENTER then
         baseX = (parent._width - child._width) / 2
         baseY = (parent._height - child._height) / 2
-    elseif child.display_mode == UI.DISPLAY_MODES.TOP_LEFT then
+    elseif child.display_mode == utils.DISPLAY_MODES.TOP_LEFT then
         baseX = padding
         baseY = padding
-    elseif child.display_mode == UI.DISPLAY_MODES.TOP_RIGHT then
+    elseif child.display_mode == utils.DISPLAY_MODES.TOP_RIGHT then
         baseX = parent._width - child._width - padding
         baseY = padding
-    elseif child.display_mode == UI.DISPLAY_MODES.TOP_CENTER then
+    elseif child.display_mode == utils.DISPLAY_MODES.TOP_CENTER then
         baseX = (parent._width - child._width) / 2
         baseY = padding
-    elseif child.display_mode == UI.DISPLAY_MODES.BOTTOM_LEFT then
+    elseif child.display_mode == utils.DISPLAY_MODES.BOTTOM_LEFT then
         baseX = padding
         baseY = parent._height - child._height - padding
-    elseif child.display_mode == UI.DISPLAY_MODES.BOTTOM_RIGHT then
+    elseif child.display_mode == utils.DISPLAY_MODES.BOTTOM_RIGHT then
         baseX = parent._width - child._width - padding
         baseY = parent._height - child._height - padding
-    elseif child.display_mode == UI.DISPLAY_MODES.BOTTOM_CENTER then
+    elseif child.display_mode == utils.DISPLAY_MODES.BOTTOM_CENTER then
         baseX = (parent._width - child._width) / 2
         baseY = parent._height - child._height - padding
-    elseif child.display_mode == UI.DISPLAY_MODES.LEFT_CENTER then
+    elseif child.display_mode == utils.DISPLAY_MODES.LEFT_CENTER then
         baseX = padding
         baseY = (parent._height - child._height) / 2
-    elseif child.display_mode == UI.DISPLAY_MODES.RIGHT_CENTER then
+    elseif child.display_mode == utils.DISPLAY_MODES.RIGHT_CENTER then
         baseX = parent._width - child._width - padding
         baseY = (parent._height - child._height) / 2
-    elseif child.display_mode == UI.DISPLAY_MODES.FILL then
+    elseif child.display_mode == utils.DISPLAY_MODES.FILL then
         baseX = padding
         baseY = padding
         -- 填充模式需要特殊处理尺寸
         child._width = math.max(0, parent._width - padding * 2)
         child._height = math.max(0, parent._height - padding * 2)
-    elseif child.display_mode == UI.DISPLAY_MODES.ABSOLUTE then
+    elseif child.display_mode == utils.DISPLAY_MODES.ABSOLUTE then
         baseX = offsetX
         baseY = offsetY
         offsetX, offsetY = 0, 0 -- 绝对定位不使用额外偏移
@@ -226,8 +163,8 @@ local function updateChildren(parent)
         local padding = child.padding or 0
 
         -- 处理尺寸定义
-        local widthDef = child.width or { value = 1, unit = UI.SIZE_UNITS.PERCENT }
-        local heightDef = child.height or { value = 1, unit = UI.SIZE_UNITS.PERCENT }
+        local widthDef = child.width or { value = 1, unit = utils.SIZE_UNITS.PERCENT }
+        local heightDef = child.height or { value = 1, unit = utils.SIZE_UNITS.PERCENT }
 
         -- 计算尺寸
         child._width = calculateDimension(widthDef, parent._width, padding)
@@ -281,7 +218,7 @@ local function drawBackground(self)
     graphics_draw(display.backgroundImage, 0, 0, 0, scaleX, scaleY)
 
     -- 调试: 绘制轮廓
-    if UI.debug.enabled and UI.debug.outlines then
+    if utils.debug.enabled and utils.debug.outlines then
         set_color(1, 0, 0, 1)
         rectangle("line", 0, 0, self._width, self._height)
         set_color(1, 1, 1, 1)
@@ -293,17 +230,17 @@ UI.body.children.background = {
     id = "background",
     z_index = 1,
     is_display = true,
-    width = { value = 1, unit = UI.SIZE_UNITS.PERCENT },
-    height = { value = 1, unit = UI.SIZE_UNITS.PERCENT },
-    display_mode = UI.DISPLAY_MODES.FILL,
+    width = { value = 1, unit = utils.SIZE_UNITS.PERCENT },
+    height = { value = 1, unit = utils.SIZE_UNITS.PERCENT },
+    display_mode = utils.DISPLAY_MODES.FILL,
     anchor = "top_left",
     children = {
         sd = {
             id = "sd",
             z_index = 1,
             is_display = true,
-            width = { value = 0.3, unit = UI.SIZE_UNITS.PERCENT },
-            height = { value = 0.3, unit = UI.SIZE_UNITS.PERCENT },
+            width = { value = 0.3, unit = utils.SIZE_UNITS.PERCENT },
+            height = { value = 0.3, unit = utils.SIZE_UNITS.PERCENT },
             anchor = "center",
             draw = function(self)
                 set_color(0, 1, 0, 1)
@@ -314,136 +251,6 @@ UI.body.children.background = {
     draw = drawBackground
 }
 
-UI.body.children.main_menu = {
-    id = "main_menu",
-    z_index = 2,
-    is_display = true,
-    width = { value = 1, unit = UI.SIZE_UNITS.PERCENT },
-    height = { value = 1, unit = UI.SIZE_UNITS.PERCENT },
-    display_mode = UI.DISPLAY_MODES.FILL,
-    anchor = "top_left",
-    children = {
-        left = {
-            id = "left",
-            z_index = 1,
-            is_display = true,
-            width = { value = 0.3, unit = UI.SIZE_UNITS.PERCENT },
-            height = { value = 1, unit = UI.SIZE_UNITS.PERCENT },
-            display_mode = UI.DISPLAY_MODES.RELATIVE,
-            anchor = "top_left",
-            children = {
-                buttonlist = {
-                    id = "button_list",
-                    z_index = 1,
-                    is_display = true,
-                    width = { value = 0.7, unit = UI.SIZE_UNITS.PERCENT },
-                    height = { value = 0.7, unit = UI.SIZE_UNITS.PERCENT },
-                    anchor = "center",
-                    draw = function(self)
-                        set_color(1, 0, 0, 0.5)
-                        rectangle("fill", 0, 0, self._width, self._height)
-                        if UI.debug.enabled then
-                            if UI.debug.positions or UI.debug.sizes then
-                                set_color(0, 0, 0, 1)
-                                local text = self.id
-                                if UI.debug.sizes then
-                                    text = text ..
-                                        string.format("\nSize: %d x %d", math_floor(self._width),
-                                            math_floor(self._height))
-                                end
-                                if UI.debug.positions then
-                                    text = text ..
-                                        string.format("\nRel_Pos: (%d, %d)", math_floor(self._x), math_floor(self._y))
-                                    text = text ..
-                                        string.format("\nAbs_Pos: (%d, %d)", math_floor(self._abs_x),
-                                            math_floor(self._abs_y))
-                                end
-                                if UI.debug.anchors then
-                                    text = text .. string.format("\nAnchor: %s", self.anchor or "none")
-                                end
-                                love.graphics.print(text, 10, 10)
-                                set_color(1, 1, 1, 1)
-                            end
-                        end
-                    end,
-                }
-            },
-            draw = function(self)
-                set_color(1, 1, 1, 0.7)
-                rectangle("fill", 0, 0, self._width, self._height)
-
-                -- 调试: 显示位置和尺寸信息
-                if UI.debug.enabled then
-                    if UI.debug.positions or UI.debug.sizes then
-                        set_color(0, 0, 0, 1)
-                        local text = self.id
-                        if UI.debug.sizes then
-                            text = text ..
-                                string.format("\nSize: %d x %d", math_floor(self._width), math_floor(self._height))
-                        end
-                        if UI.debug.positions then
-                            text = text .. string.format("\nRel_Pos: (%d, %d)", math_floor(self._x), math_floor(self._y))
-                            text = text ..
-                                string.format("\nAbs_Pos: (%d, %d)", math_floor(self._abs_x), math_floor(self._abs_y))
-                        end
-                        if UI.debug.anchors then
-                            text = text .. string.format("\nAnchor: %s", self.anchor or "none")
-                        end
-                        love.graphics.print(text, 10, 10)
-                        set_color(1, 1, 1, 1)
-                    end
-
-                    if UI.debug.outlines then
-                        set_color(0, 1, 0, 1)
-                        rectangle("line", 0, 0, self._width, self._height)
-                        set_color(1, 1, 1, 1)
-                    end
-                end
-            end
-        },
-        right = {
-            id = "right",
-            z_index = 2,
-            is_display = true,
-            width = { value = 0.7, unit = UI.SIZE_UNITS.PERCENT },
-            height = { value = 1, unit = UI.SIZE_UNITS.PERCENT },
-            display_mode = UI.DISPLAY_MODES.RELATIVE,
-            anchor = "top_right",
-            children = nil,
-            draw = function(self)
-                set_color(0.9, 0.9, 1, 0.5)
-                rectangle("fill", 0, 0, self._width, self._height)
-
-                -- 调试: 显示位置和尺寸信息
-                if UI.debug.enabled then
-                    if UI.debug.positions or UI.debug.sizes then
-                        set_color(0, 0, 0, 1)
-                        local text = "Right Panel"
-                        if UI.debug.sizes then
-                            text = text ..
-                                string.format("\nSize: %d x %d", math_floor(self._width), math_floor(self._height))
-                        end
-                        if UI.debug.positions then
-                            text = text .. string.format("\nPos: (%d, %d)", math_floor(self._x), math_floor(self._y))
-                        end
-                        if UI.debug.anchors then
-                            text = text .. string.format("\nAnchor: %s", self.anchor or "none")
-                        end
-                        love.graphics.print(text, 10, 10)
-                        set_color(0.9, 0.9, 1, 1)
-                    end
-
-                    if UI.debug.outlines then
-                        set_color(0, 0, 1, 1)
-                        rectangle("line", 0, 0, self._width, self._height)
-                        set_color(0.9, 0.9, 1, 1)
-                    end
-                end
-            end
-        }
-    },
-    draw = nil
-}
 
 -- 尺寸计算函数
 local function calculateDimension(def, parentDim)
@@ -455,9 +262,9 @@ local function calculateDimension(def, parentDim)
     -- 如果def是表，则按定义处理
     if type(def) == "table" then
         local value = def.value or 1
-        local unit = def.unit or UI.SIZE_UNITS.PIXELS
+        local unit = def.unit or utils.SIZE_UNITS.PIXELS
 
-        if unit == UI.SIZE_UNITS.PERCENT then
+        if unit == utils.SIZE_UNITS.PERCENT then
             return parentDim * value
         else -- PIXELS
             return value
@@ -474,6 +281,8 @@ function UI:update()
     local screenHeight = graphics_getHeight()
     -- Layout:clear()
     RectLayout.Layout:reset({ x = 0, y = 0, width = screenWidth, height = screenHeight }, nil)
+    RectLayout.Layout:setSmallGridOptimization()
+    RectLayout.Layout:optimizeMemory()
     -- 安全处理宽高比
     local aspectRatio = conf.aspectRatio or (16 / 9)
     if aspectRatio <= 0 then aspectRatio = 16 / 9 end
@@ -501,7 +310,7 @@ function UI:update()
     body._abs_x = body._x
     body._abs_y = body._y
 
-    if UI.debug.enabled then
+    if utils.debug.enabled then
         print("[UI DEBUG] Body updated:")
         print(string.format("  Position: (%d, %d)", math_floor(body._x), math_floor(body._y)))
         print(string.format("  Absolute Position: (%d, %d)", math_floor(body._abs_x), math_floor(body._abs_y)))
@@ -555,7 +364,7 @@ local function drawChildren(parent)
             end
 
             -- 调试: 绘制锚点
-            if UI.debug.enabled and UI.debug.anchors then
+            if utils.debug.enabled and utils.debug.anchors then
                 set_color(1, 1, 0, 1)
                 love.graphics.circle("fill", 0, 0, 3)
                 set_color(1, 1, 1, 1)
@@ -575,7 +384,7 @@ end
 function UI:draw()
     if self.body and self.body.is_display ~= false then
         -- 绘制调试网格
-        if UI.debug.enabled and UI.debug.grid then
+        if utils.debug.enabled and utils.debug.grid then
             set_color(0.3, 0.3, 0.3, 0.5)
             for i = 0, love.graphics.getWidth(), 20 do
                 love.graphics.line(i, 0, i, love.graphics.getHeight())
@@ -587,7 +396,7 @@ function UI:draw()
         end
 
         -- 绘制body轮廓
-        if UI.debug.enabled and UI.debug.outlines then
+        if utils.debug.enabled and utils.debug.outlines then
             set_color(1, 0, 0, 1)
             rectangle("line", self.body._x, self.body._y, self.body._width, self.body._height)
             set_color(1, 1, 1, 1)
@@ -647,10 +456,10 @@ function UI:addElement(parentId, element)
 
         -- 设置尺寸默认值
         if not element.width then
-            element.width = { value = 1, unit = UI.SIZE_UNITS.PERCENT }
+            element.width = { value = 1, unit = utils.SIZE_UNITS.PERCENT }
         end
         if not element.height then
-            element.height = { value = 1, unit = UI.SIZE_UNITS.PERCENT }
+            element.height = { value = 1, unit = utils.SIZE_UNITS.PERCENT }
         end
 
         parent.children[element.id] = element
@@ -724,7 +533,7 @@ function UI:setElementVisibility(elementId, visible)
     local element = self:findElement(elementId)
     if element then
         element.is_display = visible
-        if UI.debug.enabled then
+        if utils.debug.enabled then
             print("[UI DEBUG] Set visibility for", elementId, "to", visible)
         end
         -- 标记UI需要更新

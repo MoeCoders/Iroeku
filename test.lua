@@ -57,7 +57,7 @@ engine.chapter("第二章", function()
     舞:show()
     我:show()
 
-    if 舞.好感度 > 60 then
+    if 舞.other.好感度 > 60 then
         舞 "今天的课程很有趣吧？"
         我 "嗯，特别是数学课。"
     else

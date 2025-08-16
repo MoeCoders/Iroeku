@@ -1,3 +1,9 @@
+--- @class GameConfig
+--- @field title string
+--- @field subtitle string
+--- @field aspectRatio number
+--- @field debug boolean
+
 function love.conf(t)
     t.window.title = "My Game"
     t.window.width = 1280

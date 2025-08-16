@@ -282,11 +282,12 @@ function RectLayout:_addShapeToGrid(shape)
     end
 end
 
--- 判断点是否在矩形内（精确检测）
+--[[ 判断点是否在矩形内（精确检测）
 local function pointInRect(x, y, rect)
     return x >= rect.bbox.xmin and x <= rect.bbox.xmax and
         y >= rect.bbox.ymin and y <= rect.bbox.ymax
 end
+--]]
 
 -- 高效的多边形包含检测
 local function pointInPolygon(x, y, poly)
@@ -515,9 +516,12 @@ end
 -- 记录当前显示位于上层的界面布局
 RectLayout.Layout = RectLayout.new(
     { x = 0, y = 0, width = love.graphics.getWidth(), height = love.graphics.getHeight() }, {
-        minGridSize = 2,
-        maxGridSize = 20,
+        minGridSize = 10,
+        maxGridSize = 100,
         gridDensity = 0.7
     })
+RectLayout.Layout:setSmallGridOptimization()
+
+RectLayout.Layout:optimizeMemory()
 
 return RectLayout
