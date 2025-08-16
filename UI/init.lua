@@ -1,6 +1,7 @@
+-- UI.lua
 local conf = require("conf")
 local display = require("display")
-
+local RectLayout = require("UI.RectLayout")
 -- 局部化常用函数和模块
 local math_min = math.min
 local math_floor = math.floor
@@ -31,15 +32,17 @@ local function createParentProxy(parent)
     return setmetatable({ _parent = parent }, ParentProxy)
 end
 
+
 -- UI 结构定义
 local UI = {
     body = {
         id = "body",
         _x = 0,
         _y = 0,
-        _width = 0,
-        _height = 0,
-        children = {}
+        _abs_x = 0,
+        _abs_y = 0,
+        children = {},
+        is_display = true
     },
     -- 调试配置
     debug = {
@@ -100,6 +103,7 @@ UI.DEFAULT_OFFSETS = {
     [UI.DISPLAY_MODES.FILL] = { x = 0, y = 0 },
     [UI.DISPLAY_MODES.ABSOLUTE] = { x = 0, y = 0 }
 }
+
 
 -- 修改尺寸计算函数以处理内边距
 local function calculateDimension(def, parentDim, parentPadding)
@@ -200,10 +204,7 @@ local function calculatePosition(child, parent)
     local anchorOffsetY = anchor.y * child._height
 
     -- 最终位置计算
-    return {
-        x = baseX + offsetX - anchorOffsetX,
-        y = baseY + offsetY - anchorOffsetY,
-    }
+    return baseX + offsetX - anchorOffsetX, baseY + offsetY - anchorOffsetY
 end
 
 -- 更新updateChildren函数
@@ -254,9 +255,7 @@ local function updateChildren(parent)
         if not child.is_display then goto continue end
 
         -- 计算位置
-        local pos = calculatePosition(child, parent)
-        child._x = pos.x
-        child._y = pos.y
+        child._x, child._y = calculatePosition(child, parent)
 
         -- 递归处理子节点
         updateChildren(child)
@@ -343,7 +342,30 @@ UI.body.children.main_menu = {
                     draw = function(self)
                         set_color(1, 0, 0, 0.5)
                         rectangle("fill", 0, 0, self._width, self._height)
-                    end
+                        if UI.debug.enabled then
+                            if UI.debug.positions or UI.debug.sizes then
+                                set_color(0, 0, 0, 1)
+                                local text = self.id
+                                if UI.debug.sizes then
+                                    text = text ..
+                                        string.format("\nSize: %d x %d", math_floor(self._width),
+                                            math_floor(self._height))
+                                end
+                                if UI.debug.positions then
+                                    text = text ..
+                                        string.format("\nRel_Pos: (%d, %d)", math_floor(self._x), math_floor(self._y))
+                                    text = text ..
+                                        string.format("\nAbs_Pos: (%d, %d)", math_floor(self._abs_x),
+                                            math_floor(self._abs_y))
+                                end
+                                if UI.debug.anchors then
+                                    text = text .. string.format("\nAnchor: %s", self.anchor or "none")
+                                end
+                                love.graphics.print(text, 10, 10)
+                                set_color(1, 1, 1, 1)
+                            end
+                        end
+                    end,
                 }
             },
             draw = function(self)
@@ -354,13 +376,15 @@ UI.body.children.main_menu = {
                 if UI.debug.enabled then
                     if UI.debug.positions or UI.debug.sizes then
                         set_color(0, 0, 0, 1)
-                        local text = "Left Panel"
+                        local text = self.id
                         if UI.debug.sizes then
                             text = text ..
                                 string.format("\nSize: %d x %d", math_floor(self._width), math_floor(self._height))
                         end
                         if UI.debug.positions then
-                            text = text .. string.format("\nPos: (%d, %d)", math_floor(self._x), math_floor(self._y))
+                            text = text .. string.format("\nRel_Pos: (%d, %d)", math_floor(self._x), math_floor(self._y))
+                            text = text ..
+                                string.format("\nAbs_Pos: (%d, %d)", math_floor(self._abs_x), math_floor(self._abs_y))
                         end
                         if UI.debug.anchors then
                             text = text .. string.format("\nAnchor: %s", self.anchor or "none")
@@ -448,7 +472,8 @@ end
 function UI:update()
     local screenWidth = graphics_getWidth()
     local screenHeight = graphics_getHeight()
-
+    -- Layout:clear()
+    RectLayout.Layout:reset({ x = 0, y = 0, width = screenWidth, height = screenHeight }, nil)
     -- 安全处理宽高比
     local aspectRatio = conf.aspectRatio or (16 / 9)
     if aspectRatio <= 0 then aspectRatio = 16 / 9 end
@@ -473,10 +498,13 @@ function UI:update()
     body._height = bodyHeight
     body._x = (screenWidth - bodyWidth) / 2
     body._y = (screenHeight - bodyHeight) / 2
+    body._abs_x = body._x
+    body._abs_y = body._y
 
     if UI.debug.enabled then
         print("[UI DEBUG] Body updated:")
         print(string.format("  Position: (%d, %d)", math_floor(body._x), math_floor(body._y)))
+        print(string.format("  Absolute Position: (%d, %d)", math_floor(body._abs_x), math_floor(body._abs_y)))
         print(string.format("  Size: %d x %d", math_floor(body._width), math_floor(body._height)))
         print(string.format("  Screen: %d x %d", screenWidth, screenHeight))
         print(string.format("  Aspect Ratio: %.2f", aspectRatio))
@@ -511,6 +539,9 @@ local function drawChildren(parent)
     -- 绘制子节点
     for _, child in ipairs(childrenList) do
         if child.is_display then
+            -- 计算子坐标绝对坐标，并将其加入布局中
+            child._abs_x = child._x + child.parent._abs_x
+            child._abs_y = child._y + child.parent._abs_y
             graphics_push()
             -- 应用子节点变换
             graphics_translate(child._x, child._y)
@@ -518,6 +549,9 @@ local function drawChildren(parent)
             -- 绘制子节点内容
             if type(child.draw) == "function" then
                 child:draw()
+                -- 将子节点加入当前显示Layout
+                RectLayout.Layout:addRectShape(child, child._abs_x, child._abs_y, child._abs_x + child._width,
+                    child._abs_y + child._height)
             end
 
             -- 调试: 绘制锚点
@@ -690,8 +724,9 @@ function UI:setElementVisibility(elementId, visible)
     local element = self:findElement(elementId)
     if element then
         element.is_display = visible
-        print("[UI DEBUG] Set visibility for", elementId, "to", visible)
-
+        if UI.debug.enabled then
+            print("[UI DEBUG] Set visibility for", elementId, "to", visible)
+        end
         -- 标记UI需要更新
         self.needsUpdate = true
 
