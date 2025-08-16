@@ -10,24 +10,15 @@ function love.load()
 end
 
 function love.update(dt)
-    if love.window.isMinimized() then
-        return
-    end
     UI:checkForUpdates()
 end
 
 function love.resize(w, h)
     -- 标记UI需要更新
-    if love.window.isMinimized() then
-        return
-    end
     UI.needsUpdate = true
 end
 
 function love.draw()
-    if love.window.isMinimized() then
-        return
-    end
     -- 图片大小自适应，根据Body尺寸显示，保持纵横比, 并居中显示
     UI:draw()
 end
@@ -46,5 +37,5 @@ end
 
 function love.mousepressed(x, y, button)
     local e = RectLayout.Layout:getShapeDataAtPoint(x, y)
-    print(e and e.id or nil)
+    print("Clicked on element with ID: " .. (e and e.id or "none"))
 end
