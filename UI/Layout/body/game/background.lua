@@ -8,8 +8,8 @@ local graphics_draw = love.graphics.draw
 display.backgroundImage = display.backgroundImage
 
 local function drawBackground(self)
-    local a = love.graphics.newCanvas(self._width, self._height)
-    love.graphics.setCanvas(a)
+    -- local a = love.graphics.newCanvas(self._width, self._height)
+    -- love.graphics.setCanvas(a)
     if not display.backgroundImage then return end
 
     -- 计算缩放比例以适应节点尺寸
@@ -19,8 +19,8 @@ local function drawBackground(self)
     -- 绘制背景图并缩放以适应节点
     set_color(1, 1, 1, 1)
     graphics_draw(display.backgroundImage, 0, 0, 0, scaleX, scaleY)
-    love.graphics.setCanvas()
-    graphics_draw(a)
+    -- love.graphics.setCanvas()
+    -- graphics_draw(a)
     -- 调试: 绘制轮廓
     if utils.debug.enabled and utils.debug.outlines then
         set_color(1, 0, 0, 1)
@@ -56,3 +56,4 @@ local background = Element.new({
 background:setDrawFunc(drawBackground)
 
 return background
+
