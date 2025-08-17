@@ -3,7 +3,9 @@ local rectangle = love.graphics.rectangle
 local set_color = love.graphics.setColor
 local math_floor = math.floor
 local buttons = require("UI.Layout.body.main_menu.left_pl.buttons")
-local left_pl = {
+local Element = require("UI.Components.Element")
+
+local left_pl = Element.new({
     id = "left",
     z_index = 1,
     visible = true,
@@ -45,6 +47,6 @@ local left_pl = {
                 set_color(1, 1, 1, 1)
             end
         end
-    end
-}
+    end,
+})
 return left_pl

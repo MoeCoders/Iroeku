@@ -1,6 +1,5 @@
 -- UI.lua
 local conf = require("conf")
-local display = require("display")
 local RectLayout = require("UI.RectLayout")
 local utils = require("UI.utils")
 local bodyElement = require("UI.Layout.body")
@@ -14,11 +13,7 @@ local graphics_getHeight = love.graphics.getHeight
 local graphics_push = love.graphics.push
 local graphics_pop = love.graphics.pop
 local graphics_translate = love.graphics.translate
-local graphics_draw = love.graphics.draw
-local new_canvas = love.graphics.newCanvas
-local set_canvas = love.graphics.setCanvas
 local setmetatable = setmetatable
-local ipairs = ipairs
 local pairs = pairs
 local table_sort = table.sort
 local table_insert = table.insert
@@ -147,58 +142,28 @@ local function calculatePosition(child, parent)
 end
 
 -- 更新updateChildren函数
-local function updateChildren(parent)
-    if not parent or not parent.children then return end
-
-    -- 先更新所有子节点的尺寸
-    for _, child in pairs(parent.children) do
-        if not child.visible then goto continue end
-
-        -- 设置/更新父代理
-        if not child.parent then
+local function updateChildren(root)
+    local stack = {}
+    table.insert(stack, root)
+    while #stack > 0 do
+        local parent = table.remove(stack)
+        if not parent.children then goto continue end
+        for _, child in pairs(parent.children) do
+            if not child.visible then goto child_continue end
             child.parent = createParentProxy(parent)
-        else
-            child.parent._parent = parent
+            local padding = child.padding or 0
+            local widthDef = child.width or { value = 1, unit = utils.SIZE_UNITS.PERCENT }
+            local heightDef = child.height or { value = 1, unit = utils.SIZE_UNITS.PERCENT }
+            child._width = calculateDimension(widthDef, parent._width, padding)
+            child._height = calculateDimension(heightDef, parent._height, padding)
+            if child.min_width then child._width = math_max(child._width, calculateDimension(child.min_width, parent._width)) end
+            if child.max_width then child._width = math_min(child._width, calculateDimension(child.max_width, parent._width)) end
+            if child.min_height then child._height = math_max(child._height, calculateDimension(child.min_height, parent._height)) end
+            if child.max_height then child._height = math_min(child._height, calculateDimension(child.max_height, parent._height)) end
+            child._x, child._y = calculatePosition(child, parent)
+            if child.children then table.insert(stack, child) end
+            ::child_continue::
         end
-
-        -- 获取内边距
-        local padding = child.padding or 0
-
-        -- 处理尺寸定义
-        local widthDef = child.width or { value = 1, unit = utils.SIZE_UNITS.PERCENT }
-        local heightDef = child.height or { value = 1, unit = utils.SIZE_UNITS.PERCENT }
-
-        -- 计算尺寸
-        child._width = calculateDimension(widthDef, parent._width, padding)
-        child._height = calculateDimension(heightDef, parent._height, padding)
-
-        -- 尺寸限制
-        if child.min_width then
-            child._width = math_max(child._width, calculateDimension(child.min_width, parent._width))
-        end
-        if child.max_width then
-            child._width = math_min(child._width, calculateDimension(child.max_width, parent._width))
-        end
-        if child.min_height then
-            child._height = math_max(child._height, calculateDimension(child.min_height, parent._height))
-        end
-        if child.max_height then
-            child._height = math_min(child._height, calculateDimension(child.max_height, parent._height))
-        end
-
-        ::continue::
-    end
-
-    -- 然后更新位置
-    for _, child in pairs(parent.children) do
-        if not child.visible then goto continue end
-
-        -- 计算位置
-        child._x, child._y = calculatePosition(child, parent)
-
-        -- 递归处理子节点
-        updateChildren(child)
-
         ::continue::
     end
 end
@@ -278,57 +243,47 @@ function UI:update(dt)
 end
 
 -- 递归绘制子节点
-local function drawChildren(parent)
-    if not parent.children then return end
-
-    -- 应用父节点变换
-    graphics_push()
-    graphics_translate(parent._x, parent._y)
-
-    -- 收集子节点到列表用于排序
-    local childrenList = {}
-    for _, child in pairs(parent.children) do
-        table_insert(childrenList, child)
-    end
-
-    -- 按z_index排序（从低到高）
-    table_sort(childrenList, function(a, b)
-        return (a.z_index or 0) < (b.z_index or 0)
-    end)
-
-    -- 绘制子节点
-    for _, child in ipairs(childrenList) do
-        if child.visible then
-            -- 计算子坐标绝对坐标，并将其加入布局中
-            child._abs_x = child._x + child.parent._abs_x
-            child._abs_y = child._y + child.parent._abs_y
+local function drawChildren(root)
+    local stack = {}
+    table.insert(stack, {node = root, state = 1})
+    while #stack > 0 do
+        local entry = stack[#stack]
+        local parent = entry.node
+        if entry.state == 1 then
             graphics_push()
-            -- 应用子节点变换
-            graphics_translate(child._x, child._y)
-
-            -- 绘制子节点内容
-            if type(child.draw) == "function" then
-                child:draw()
-                -- 将子节点加入当前显示Layout
-                RectLayout.Layout:addRectShape(child, child._abs_x, child._abs_y, child._abs_x + child._width,
-                    child._abs_y + child._height)
+            graphics_translate(parent._x, parent._y)
+            if type(parent.draw) == "function" then
+                parent:draw()
+                RectLayout.Layout:addRectShape(parent, parent._abs_x, parent._abs_y, parent._abs_x + parent._width, parent._abs_y + parent._height)
             end
-
-            -- 调试: 绘制锚点
             if utils.debug.enabled and utils.debug.anchors then
                 set_color(1, 1, 0, 1)
                 love.graphics.circle("fill", 0, 0, 3)
                 set_color(1, 1, 1, 1)
             end
-
-            -- 递归绘制子节点的子节点
-            drawChildren(child)
-
-            graphics_pop()
+            entry.childrenList = {}
+            for _, child in pairs(parent.children) do
+                table_insert(entry.childrenList, child)
+            end
+            table_sort(entry.childrenList, function(a, b) return (a.z_index or 0) < (b.z_index or 0) end)
+            entry.index = 1
+            entry.state = 2
+        elseif entry.state == 2 then
+            if entry.index > #entry.childrenList then
+                graphics_pop()
+                table.remove(stack)
+                goto continue
+            end
+            local child = entry.childrenList[entry.index]
+            entry.index = entry.index + 1
+            if child.visible then
+                child._abs_x = child._x + child.parent._abs_x
+                child._abs_y = child._y + child.parent._abs_y
+                table.insert(stack, {node = child, state = 1})
+            end
         end
+        ::continue::
     end
-
-    graphics_pop()
 end
 
 -- 主绘制函数
@@ -398,23 +353,9 @@ function UI:addElement(parentId, element)
             parent.children = {}
         end
 
-        -- 确保元素有必要的字段
-        element.id = element.id or ("element_" .. tostring(math.random(10000, 99999)))
-        element.z_index = element.z_index or 1
-        element.visible = element.visible ~= false
-        element.display_mode = element.display_mode or UI.DISPLAY_MODES.RELATIVE
-        element.anchor = element.anchor or "top_left"
-
-        -- 设置尺寸默认值
-        if not element.width then
-            element.width = { value = 1, unit = utils.SIZE_UNITS.PERCENT }
-        end
-        if not element.height then
-            element.height = { value = 1, unit = utils.SIZE_UNITS.PERCENT }
-        end
-
-        parent.children[element.id] = element
-        element.parent = createParentProxy(parent)
+        local newElement = Element.new(element)
+        parent.children[newElement.id] = newElement
+        newElement.parent = createParentProxy(parent)
 
         print("[UI INFO] Added element:", element.id, "to parent:", parentId)
 
@@ -434,7 +375,11 @@ function UI:removeElement(elementId)
         if node.children then
             for key, child in pairs(node.children) do
                 if child.id == id then
+                    local element = node.children[key]
                     node.children[key] = nil
+                    if element.remove then
+                        element:remove()
+                    end
                     print("[UI INFO] Removed element:", id)
                     return true
                 end
@@ -605,6 +550,10 @@ end
 
 -- 初始化UI
 function UI:init()
+    if jit then
+        jit.opt.start("hotloop=10", "hotexit=5")
+        jit.on()
+    end
     self.needsUpdate = true
     self:update()
 end

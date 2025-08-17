@@ -1,4 +1,6 @@
 local utils = require("UI.utils")
+local ObjectPool = require("UI.ObjectPool")
+local TablePool = require("UI.TablePool")
 
 ---@class Element 通用元素类
 ---@field id string 元素的唯一标识符
@@ -13,22 +15,37 @@ local utils = require("UI.utils")
 --- @field anchor string 元素的锚点
 local Element = {}
 
+local events_pool = TablePool.new()
+local children_pool = TablePool.new()
+
+local element_pool = ObjectPool.new(function()
+    local element = {}
+    setmetatable(element, { __index = Element })
+    return element
+end, function(element)
+    element.id = nil
+    element.visible = true
+    element.width = nil
+    element.height = nil
+    element.z_index = nil
+    element.draw = nil
+    element.anchor = "top_left"
+end)
+
 ---comment
 ---@param e table
 ---@return Element
 function Element.new(e)
-    local element = {
-        id = e.id,
-        visible = e.visible or true,
-        width = e.width or { value = 1, unit = utils.SIZE_UNITS.PERCENT },
-        height = e.height or { value = 1, unit = utils.SIZE_UNITS.PERCENT },
-        z_index = e.z_index,
-        events = e.events or {},
-        children = e.children or {},
-        draw = e.draw or nil,
-        anchor = e.anchor or "top_left"
-    }
-    setmetatable(element, { __index = Element })
+    local element = element_pool:get()
+    element.id = e.id
+    element.visible = e.visible or true
+    element.width = e.width or { value = 1, unit = utils.SIZE_UNITS.PERCENT }
+    element.height = e.height or { value = 1, unit = utils.SIZE_UNITS.PERCENT }
+    element.z_index = e.z_index
+    element.events = e.events or events_pool:get()
+    element.children = e.children or children_pool:get()
+    element.draw = e.draw or nil
+    element.anchor = e.anchor or "top_left"
     return element
 end
 
@@ -37,7 +54,16 @@ function Element:setDrawFunc(drawFunc)
 end
 
 function Element:remove()
-    self = nil
+    -- 递归释放子元素
+    for _, child in pairs(self.children) do
+        if child.remove then
+            child:remove()
+        end
+    end
+    -- 释放表
+    events_pool:release(self.events)
+    children_pool:release(self.children)
+    element_pool:release(self)
 end
 
 ---@param callback fun() 鼠标点击元素时触发的回调函数

@@ -2,8 +2,9 @@ local utils = require("UI.utils")
 local set_color = love.graphics.setColor
 local rectangle = love.graphics.rectangle
 local math_floor = math.floor
+local Element = require("UI.Components.Element")
 
-local buttons = {
+local buttons = Element.new({
     id = "button_list",
     z_index = 1,
     visible = true,
@@ -37,5 +38,6 @@ local buttons = {
             end
         end
     end,
-}
+})
+
 return buttons
