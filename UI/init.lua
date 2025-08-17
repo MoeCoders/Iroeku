@@ -15,6 +15,8 @@ local graphics_push = love.graphics.push
 local graphics_pop = love.graphics.pop
 local graphics_translate = love.graphics.translate
 local graphics_draw = love.graphics.draw
+local new_canvas = love.graphics.newCanvas
+local set_canvas = love.graphics.setCanvas
 local setmetatable = setmetatable
 local ipairs = ipairs
 local pairs = pairs
@@ -150,7 +152,7 @@ local function updateChildren(parent)
 
     -- 先更新所有子节点的尺寸
     for _, child in pairs(parent.children) do
-        if not child.is_display then goto continue end
+        if not child.visible then goto continue end
 
         -- 设置/更新父代理
         if not child.parent then
@@ -189,7 +191,7 @@ local function updateChildren(parent)
 
     -- 然后更新位置
     for _, child in pairs(parent.children) do
-        if not child.is_display then goto continue end
+        if not child.visible then goto continue end
 
         -- 计算位置
         child._x, child._y = calculatePosition(child, parent)
@@ -200,57 +202,6 @@ local function updateChildren(parent)
         ::continue::
     end
 end
-
--- 资源预加载
-display.logoImage = display.logoImage or love.graphics.newImage("resources/logo.jpg")
-display.backgroundImage = display.backgroundImage or love.graphics.newImage("resources/bg.png")
-
--- 背景绘制函数
-local function drawBackground(self)
-    if not display.backgroundImage then return end
-
-    -- 计算缩放比例以适应节点尺寸
-    local scaleX = self._width / display.backgroundImage:getWidth()
-    local scaleY = self._height / display.backgroundImage:getHeight()
-
-    -- 绘制背景图并缩放以适应节点
-    set_color(1, 1, 1, 1)
-    graphics_draw(display.backgroundImage, 0, 0, 0, scaleX, scaleY)
-
-    -- 调试: 绘制轮廓
-    if utils.debug.enabled and utils.debug.outlines then
-        set_color(1, 0, 0, 1)
-        rectangle("line", 0, 0, self._width, self._height)
-        set_color(1, 1, 1, 1)
-    end
-end
-
--- 初始化UI结构
-UI.body.children.background = {
-    id = "background",
-    z_index = 1,
-    is_display = true,
-    width = { value = 1, unit = utils.SIZE_UNITS.PERCENT },
-    height = { value = 1, unit = utils.SIZE_UNITS.PERCENT },
-    display_mode = utils.DISPLAY_MODES.FILL,
-    anchor = "top_left",
-    children = {
-        sd = {
-            id = "sd",
-            z_index = 1,
-            is_display = true,
-            width = { value = 0.3, unit = utils.SIZE_UNITS.PERCENT },
-            height = { value = 0.3, unit = utils.SIZE_UNITS.PERCENT },
-            anchor = "center",
-            draw = function(self)
-                set_color(0, 1, 0, 1)
-                rectangle("fill", 0, 0, self._width, self._height)
-            end
-        }
-    },
-    draw = drawBackground
-}
-
 
 -- 尺寸计算函数
 local function calculateDimension(def, parentDim)
@@ -276,7 +227,7 @@ local function calculateDimension(def, parentDim)
 end
 
 -- 修复: 确保body尺寸正确更新
-function UI:update()
+function UI:update(dt)
     local screenWidth = graphics_getWidth()
     local screenHeight = graphics_getHeight()
     -- Layout:clear()
@@ -347,7 +298,7 @@ local function drawChildren(parent)
 
     -- 绘制子节点
     for _, child in ipairs(childrenList) do
-        if child.is_display then
+        if child.visible then
             -- 计算子坐标绝对坐标，并将其加入布局中
             child._abs_x = child._x + child.parent._abs_x
             child._abs_y = child._y + child.parent._abs_y
@@ -382,7 +333,7 @@ end
 
 -- 主绘制函数
 function UI:draw()
-    if self.body and self.body.is_display ~= false then
+    if self.body and self.body.visible ~= false then
         -- 绘制调试网格
         if utils.debug.enabled and utils.debug.grid then
             set_color(0.3, 0.3, 0.3, 0.5)
@@ -450,7 +401,7 @@ function UI:addElement(parentId, element)
         -- 确保元素有必要的字段
         element.id = element.id or ("element_" .. tostring(math.random(10000, 99999)))
         element.z_index = element.z_index or 1
-        element.is_display = element.is_display ~= false
+        element.visible = element.visible ~= false
         element.display_mode = element.display_mode or UI.DISPLAY_MODES.RELATIVE
         element.anchor = element.anchor or "top_left"
 
@@ -532,7 +483,7 @@ end
 function UI:setElementVisibility(elementId, visible)
     local element = self:findElement(elementId)
     if element then
-        element.is_display = visible
+        element.visible = visible
         if utils.debug.enabled then
             print("[UI DEBUG] Set visibility for", elementId, "to", visible)
         end
@@ -629,7 +580,7 @@ function UI:printStructure()
             spaces, node.id, node.display_mode or "none",
             node.z_index or 0, node._width, node._height,
             node._x or 0, node._y or 0,
-            tostring(node.is_display ~= false)))
+            tostring(node.visible ~= false)))
 
         if node.children then
             for _, child in pairs(node.children) do
@@ -643,9 +594,9 @@ function UI:printStructure()
 end
 
 -- 确保在游戏循环中调用UI更新
-function UI:checkForUpdates()
+function UI:checkForUpdates(dt)
     if self.needsUpdate then
-        self:update()
+        self:update(dt)
         self.needsUpdate = false
         return true
     end
