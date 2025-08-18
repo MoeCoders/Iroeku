@@ -20,6 +20,9 @@ local table_insert = table.insert
 local set_color = love.graphics.setColor
 local rectangle = love.graphics.rectangle
 local print = print
+local TablePool = require("UI.TablePool")
+local stackPool = TablePool.new()
+local listPool = TablePool.new()
 
 -- 创建父元素代理元表
 local ParentProxy = {}
@@ -27,9 +30,14 @@ ParentProxy.__index = function(t, k)
     return t._parent[k]
 end
 
--- 创建父元素代理对象
-local function createParentProxy(parent)
-    return setmetatable({ _parent = parent }, ParentProxy)
+-- 创建或重用父元素代理对象
+local function createOrReuseParentProxy(element, parent)
+    if not element._parentProxy then
+        element._parentProxy = setmetatable({ _parent = parent }, ParentProxy)
+    else
+        element._parentProxy._parent = parent
+    end
+    return element._parentProxy
 end
 
 
@@ -143,14 +151,14 @@ end
 
 -- 更新updateChildren函数
 local function updateChildren(root)
-    local stack = {}
+    local stack = stackPool:get()
     table.insert(stack, root)
     while #stack > 0 do
         local parent = table.remove(stack)
         if not parent.children then goto continue end
         for _, child in pairs(parent.children) do
             if not child.visible then goto child_continue end
-            child.parent = createParentProxy(parent)
+            child.parent = createOrReuseParentProxy(child, parent)
             local padding = child.padding or 0
             local widthDef = child.width or { value = 1, unit = utils.SIZE_UNITS.PERCENT }
             local heightDef = child.height or { value = 1, unit = utils.SIZE_UNITS.PERCENT }
@@ -166,6 +174,7 @@ local function updateChildren(root)
         end
         ::continue::
     end
+    stackPool:release(stack)
 end
 
 -- 尺寸计算函数
@@ -244,7 +253,7 @@ end
 
 -- 递归绘制子节点
 local function drawChildren(root)
-    local stack = {}
+    local stack = stackPool:get()
     table.insert(stack, {node = root, state = 1})
     while #stack > 0 do
         local entry = stack[#stack]
@@ -261,7 +270,7 @@ local function drawChildren(root)
                 love.graphics.circle("fill", 0, 0, 3)
                 set_color(1, 1, 1, 1)
             end
-            entry.childrenList = {}
+            entry.childrenList = listPool:get()
             for _, child in pairs(parent.children) do
                 table_insert(entry.childrenList, child)
             end
@@ -271,6 +280,8 @@ local function drawChildren(root)
         elseif entry.state == 2 then
             if entry.index > #entry.childrenList then
                 graphics_pop()
+                listPool:release(entry.childrenList)
+                entry.childrenList = nil
                 table.remove(stack)
                 goto continue
             end
@@ -284,11 +295,13 @@ local function drawChildren(root)
         end
         ::continue::
     end
+    stackPool:release(stack)
 end
 
 -- 主绘制函数
 function UI:draw()
     if self.body and self.body.visible ~= false then
+        RectLayout.Layout:clear()
         -- 绘制调试网格
         if utils.debug.enabled and utils.debug.grid then
             set_color(0.3, 0.3, 0.3, 0.5)
@@ -355,7 +368,7 @@ function UI:addElement(parentId, element)
 
         local newElement = Element.new(element)
         parent.children[newElement.id] = newElement
-        newElement.parent = createParentProxy(parent)
+        newElement.parent = createOrReuseParentProxy(newElement, parent)
 
         print("[UI INFO] Added element:", element.id, "to parent:", parentId)
 

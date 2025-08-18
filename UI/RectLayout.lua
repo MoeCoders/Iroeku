@@ -113,12 +113,15 @@ function RectLayout:addRectShape(rectData, x1, y1, x2, y2)
     -- 使用对象池获取边界框
     local bbox = acquireBBox(self, xmin, ymin, xmax, ymax)
 
+    -- 使用对象池获取点数组
+    local points = acquirePointArray(self, xmin, ymin, xmax, ymin, xmax, ymax, xmin, ymax)
+
     local shape = {
         id = self.nextShapeId,
         type = "rect",
         data = rectData,
         bbox = bbox,
-        points = { xmin, ymin, xmax, ymin, xmax, ymax, xmin, ymax }
+        points = points
     }
 
     self:_addShapeToGrid(shape)
@@ -414,7 +417,7 @@ function RectLayout:clear()
         if shape.bbox then
             releaseToPool(self._bboxPool, shape.bbox, 200)
         end
-        if shape.type == "polygon" and shape.points then
+        if shape.points then
             releaseToPool(self._pointArrayPool, shape.points, 100)
         end
         self.shapes[id] = nil
