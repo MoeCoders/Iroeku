@@ -3,7 +3,7 @@ local conf = require("conf")
 local RectLayout = require("UI.RectLayout")
 local utils = require("UI.utils")
 local bodyElement = require("UI.Layout.body")
-
+local Element = require("UI.Components.Element")
 -- 局部化常用函数和模块
 local math_min = math.min
 local math_floor = math.floor
@@ -551,6 +551,7 @@ end
 -- 初始化UI
 function UI:init()
     if jit then
+        ---@diagnostic disable-next-line: undefined-field
         jit.opt.start("hotloop=10", "hotexit=5")
         jit.on()
     end

@@ -3,6 +3,8 @@ local utils = require("UI.utils")
 local ObjectPool = require("UI.ObjectPool")
 
 ---@class Button
+---@field id string
+
 local Button = {}
 
 local button_pool = ObjectPool.new(function()
@@ -19,6 +21,7 @@ end, function(btn)
     btn.anchor = "center"
 end)
 
+---@param config table
 function Button.new(config)
     local btn = button_pool:get()
     btn.id = config.id
